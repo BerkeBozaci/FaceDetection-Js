@@ -34,15 +34,21 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 camera.position.z = 5;
 
-let mesh;
 let model;
+window.addEventListener("resize", () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
 
 const loader = new GLTFLoader();
 loader.load("../models/scene.gltf", (gltf) => {
   model = gltf.scene;
-  model.scale.set(3, 3, 3); // Adjust the scale as necessary
+  model.scale.set(15, 15, 15); // Adjust the scale as necessary
   scene.add(model);
 });
+
+let previousChinTipX = null;
 
 video.addEventListener("play", () => {
   const canvas = faceapi.createCanvasFromMedia(video);
@@ -60,10 +66,13 @@ video.addEventListener("play", () => {
     });
 
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
-    faceapi.draw.drawDetections(canvas, resizedDetections); //frame which is around the face
+    //faceapi.draw.drawDetections(canvas, resizedDetections); //frame which is around the face
     faceapi.draw.drawFaceLandmarks(canvas, resizedDetections); //landmarks
 
     if (detections && detections.length > 0) {
+      console.log("######################");
+
+      console.log("NEW DETECTION");
       const landmarks = detections[0].landmarks;
       const positions = landmarks.positions;
 
@@ -71,25 +80,29 @@ video.addEventListener("play", () => {
       const leftEyeRightEnd = positions[40];
       const rightEyeLeftEnd = positions[43];
 
-      const minFaceWidth = 100; // Assuming a face at a farther distance might occupy 100 pixels width
-      const maxFaceWidth = 300; // Assuming a close-up face might occupy 300 pixels width
+      const leftCheek = positions[1];
+      const rightCheek = positions[15];
+
+      // UPDATE AUGUST 21 //
+      const faceCenterX =
+        (noseTip._x +
+          leftEyeRightEnd._x +
+          rightEyeLeftEnd._x +
+          leftCheek._x +
+          rightCheek._x) /
+        5;
+      const faceCenterY =
+        (noseTip._y +
+          leftEyeRightEnd._y +
+          rightEyeLeftEnd._y +
+          leftCheek._y +
+          rightCheek._y) /
+        5;
+      const chinTip = positions[9];
+      previousChinTipX = chinTip._x;
+
       const currentFaceWidth = detections[0].alignedRect.box.width;
-
-      const leftEyebrowInner = positions[22];
-      const rightEyebrowInner = positions[21];
-
-      // Use the average of the inner eyebrows for a more central position on the forehead
-      const hatPositionX = (leftEyebrowInner._x + rightEyebrowInner._x) / 2;
-      const hatPositionY =
-        (leftEyebrowInner._y + rightEyebrowInner._y) / 2 - 10; // Adjust the '-10' as necessary
-
-      // console.log(currentFaceWidth);
-      const normalizedWidth =
-        (currentFaceWidth - minFaceWidth) / (maxFaceWidth - minFaceWidth);
-
-      const minZ = 0;
-      const maxZ = 20;
-      const depthZ = (1 - normalizedWidth) * (maxZ - minZ) + minZ;
+      console.log("Face width", currentFaceWidth);
 
       const leftEyeToNose = Math.sqrt(
         Math.pow(leftEyeRightEnd._x - noseTip._x, 2) +
@@ -103,50 +116,90 @@ video.addEventListener("play", () => {
       const relativeRotation =
         (leftEyeToNose - rightEyeToNose) / (leftEyeToNose + rightEyeToNose);
 
-      // Convert 2D coordinates to 3D space
+      const noseStart = positions[28];
+      console.log("Nose Start", noseStart._y);
+
       const vector = new THREE.Vector3(
-        (noseTip._x / window.innerWidth) * 2 - 1,
-        -(noseTip._y / window.innerHeight) * 2 + 1,
+        (faceCenterX / window.innerWidth) * 2 - 1,
+        -(faceCenterY / window.innerHeight) * 2 + 1,
         0.5
       );
 
-      //(x, y, z) x and y is between range -1 to 1 and calculation for this
-      // is different from each other because origin for 2D screen space is
-      // at top-left, because of that y values should be inverted
-
-      vector.unproject(camera); //for camera to use in the projection
-      //Projects this vector from the camera's normalized device coordinate (NDC) space into world space.
+      vector.unproject(camera);
 
       const dir = vector.sub(camera.position).normalize();
       const distance = -camera.position.z / dir.z;
       const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-
-      // if (!model) {
-      //   return; // If the model hasn't been loaded yet, do nothing
-      // }
-      // model.position.set(pos.x + 3, pos.y, 4 - depthZ);
-      // model.rotation.y = relativeRotation * Math.PI;
-      // Add or update 3D object
 
       if (!model) {
         return;
       }
       const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
       scene.add(ambientLight);
+      const maxRotation = 0.5; // or any value that suits your need
+      model.rotation.y = Math.min(
+        Math.max(relativeRotation * Math.PI, -maxRotation),
+        maxRotation
+      );
 
-      model.position.set(pos.x + 5, pos.y, 6 - depthZ);
-      model.rotation.y = relativeRotation * Math.PI;
-
-      // if (!mesh) {
-      //   const geometry = new THREE.BoxGeometry(2, 1, 1);
-      //   const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-      //   mesh = new THREE.Mesh(geometry, material);
-      //   scene.add(mesh);
-      // }
-      // mesh.position.set(pos.x + 5, pos.y, 6 - depthZ);
-      // mesh.rotation.y = relativeRotation * Math.PI; // Adjust the scaling factor as needed
+      //model.position.set(0.03 * chinTip._x - 10.5, pos.y, -30 - depthZ); // much accurate while tracking the face in x plane
+      model.position.set(
+        0.3 * chinTip._x - 110.5,
+        -0.45 * noseStart._y + 160,
+        0.8427412 * currentFaceWidth - 317.61
+      ); // much accurate while tracking the face in x plane
+      model.scale.set(50, 50, 50);
+      //model.rotation.y = relativeRotation * Math.PI;
     }
 
     renderer.render(scene, camera);
   }, 100);
 });
+
+// Datas
+
+// X data
+//post.x     :          -13                 -8                 0                     9                  12
+// Chintip x : 147.74669310711624, 247.09348037975846, 337.8814877712409, 469.4418827744637,554.0936163712155
+// Face width: 114.93282858469778
+
+// pos.x     :     -10        -6,7        0           6           10
+// Chintip x : 113.2355, 212.962217, 351.167434, 472.538116, 548.345521
+// Face width: 143.1208
+
+//pos.x      :     -6           0           6
+// Chintip x : 168.412624, 360.637007, 528.340631
+// Face width: 216.307
+
+//pos.x      :     -5           0          5
+// Chintip x : 195.93598, 359.3411429, 521.32612
+// Face width: 248.13337
+
+// Z position DATA
+// pos.z: -250
+// facewidth = 80.333588975393
+
+// pos.z: -200
+// facewidth = 119.9270099401474
+
+// pos.z: -150
+// facewidth = 170.72206109315405
+
+// pos.z: -100
+// facewidth = 202.7367770677079
+
+// pos.z: -70
+// facewidth = 266.0020854960942
+
+// Y DATA
+// y = 35;
+// facewidth = 237.8443972885609
+// nose start = 201.59135519589983
+
+// y = 30;
+// facewidth = 193.10808105468752
+// nose start = 296.16902957406757
+
+// y = 12;
+// facewidth = 123.27753503322603
+// nose start = 283.5192069577627
