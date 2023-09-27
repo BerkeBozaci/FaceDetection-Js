@@ -20,7 +20,6 @@ function startWebcam() {
     });
 }
 
-// Three.js setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -127,29 +126,26 @@ video.addEventListener("play", () => {
 
       vector.unproject(camera);
 
-      const dir = vector.sub(camera.position).normalize();
-      const distance = -camera.position.z / dir.z;
-      const pos = camera.position.clone().add(dir.multiplyScalar(distance));
-
       if (!model) {
         return;
       }
       const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
       scene.add(ambientLight);
-      const maxRotation = 0.5; // or any value that suits your need
+      const maxRotation = 0.5;
       model.rotation.y = Math.min(
         Math.max(relativeRotation * Math.PI, -maxRotation),
         maxRotation
       );
+      const y = -0.45 * noseStart._y + 160;
+      const roll_angle = 0.35 * y;
 
-      //model.position.set(0.03 * chinTip._x - 10.5, pos.y, -30 - depthZ); // much accurate while tracking the face in x plane
       model.position.set(
         0.3 * chinTip._x - 110.5,
-        -0.45 * noseStart._y + 160,
-        0.8427412 * currentFaceWidth - 317.61
-      ); // much accurate while tracking the face in x plane
-      model.scale.set(50, 50, 50);
-      //model.rotation.y = relativeRotation * Math.PI;
+        -0.45 * noseStart._y + 0.3213706 * currentFaceWidth + 95,
+        0.8427412 * currentFaceWidth - 320.61
+      );
+      model.scale.set(55, 55, 55);
+      model.rotation.x = roll_angle * (Math.PI / 180);
     }
 
     renderer.render(scene, camera);
